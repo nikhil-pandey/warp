@@ -109,6 +109,7 @@ impl OnboardingMainView {
                 true,
                 models.clone(),
                 default_model_id.clone(),
+                onboarding::OnboardingIntention::AgentDrivenDevelopment,
                 false,
                 false,
                 false,

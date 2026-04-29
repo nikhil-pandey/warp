@@ -508,10 +508,11 @@ pub fn run() -> Result<()> {
     // Parse command-line arguments.
     let args = warp_cli::Args::from_env();
 
-    // Server URL overrides are only honored on internal dev channels. Release channels silently
-    // ignore `--server-root-url` / `--ws-server-url` / `--session-sharing-server-url` (and their
-    // `WARP_*` env-var equivalents) so shipped builds can't be redirected away from their
-    // baked-in server URLs. See `Channel::allows_server_url_overrides`.
+    // Server URL overrides are honored on internal dev and OSS channels. First-party release
+    // channels silently ignore `--server-root-url` / `--ws-server-url` /
+    // `--session-sharing-server-url` (and their `WARP_*` env-var equivalents) so shipped builds
+    // can't be redirected away from their baked-in server URLs. See
+    // `Channel::allows_server_url_overrides`.
     if ChannelState::channel().allows_server_url_overrides() {
         if let Some(url) = args.server_root_url() {
             if let Err(e) = ChannelState::override_server_root_url(url.to_owned()) {

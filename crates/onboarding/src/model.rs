@@ -156,21 +156,34 @@ pub(crate) struct OnboardingStateModel {
 
 impl OnboardingStateModel {
     /// Creates a new OnboardingStateModel.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         models: Vec<OnboardingModelInfo>,
         default_model_id: LLMId,
+        initial_intention: OnboardingIntention,
         workspace_enforces_autonomy: bool,
         agent_modality_enabled: bool,
         free_user_no_ai_experiment: bool,
         agent_price_cents: Option<i32>,
         auth_state: OnboardingAuthState,
     ) -> Self {
+        let mut agent_settings = AgentDevelopmentSettings::new(default_model_id);
+        agent_settings.show_agent_notifications = matches!(
+            initial_intention,
+            OnboardingIntention::AgentDrivenDevelopment
+        );
+
         Self {
             step: OnboardingStep::Intro,
-            intention: OnboardingIntention::AgentDrivenDevelopment,
-            agent_settings: AgentDevelopmentSettings::new(default_model_id),
+            intention: initial_intention,
+            agent_settings,
             project_settings: ProjectOnboardingSettings::default(),
-            ui_customization: UICustomizationSettings::agent_defaults(),
+            ui_customization: match initial_intention {
+                OnboardingIntention::AgentDrivenDevelopment => {
+                    UICustomizationSettings::agent_defaults()
+                }
+                OnboardingIntention::Terminal => UICustomizationSettings::terminal_defaults(),
+            },
             models,
             workspace_enforces_autonomy,
             agent_modality_enabled,

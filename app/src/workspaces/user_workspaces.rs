@@ -8,7 +8,7 @@ use super::{
 use crate::{
     ai::llms::LLMModelHost,
     auth::{AuthStateProvider, UserUid},
-    channel::ChannelState,
+    channel::{Channel, ChannelState},
     cloud_object::{
         model::persistence::CloudModel, CloudObjectEventEntrypoint, ObjectType, Owner, Space,
     },
@@ -389,6 +389,10 @@ impl UserWorkspaces {
     /// In the future, we should store active AI enablement on the policy directly. For now, we
     /// proxy whether active AI by checking if prompt suggestions, next command, or code suggestions are enabled.
     pub fn is_active_ai_allowed(&self) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return true;
+        }
+
         self.current_team().is_none_or(|team| {
             team.billing_metadata
                 .tier
@@ -406,6 +410,10 @@ impl UserWorkspaces {
     /// are on the Warp Plan or the build is dogfood (both our internal Warp team and dogfood
     /// team are billed as enterprise).
     pub fn ai_allowed_for_current_team(&self) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return true;
+        }
+
         !self
             .current_team()
             .is_some_and(|team| team.billing_metadata.customer_type == CustomerType::Enterprise)
@@ -418,6 +426,10 @@ impl UserWorkspaces {
     /// Whether Prompt Suggestions should be toggleable for the current user, based on the active policies.
     /// Note that the value may be incorrect if called before the team's billing metadata has been fetched.
     pub fn is_prompt_suggestions_toggleable(&self) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return true;
+        }
+
         self.current_team()
             // If the user has no team, they can toggle prompt suggestions (no restrictions).
             .is_none_or(|team| {
@@ -431,6 +443,10 @@ impl UserWorkspaces {
     /// Whether Code Suggestions should be toggleable for the current user, based on the active policies.
     /// Note that the value may be incorrect if called before the team's billing metadata has been fetched.
     pub fn is_code_suggestions_toggleable(&self) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return true;
+        }
+
         self.current_team()
             // If the user has no team, they can toggle code suggestions (no restrictions).
             .is_none_or(|team| {
@@ -444,6 +460,10 @@ impl UserWorkspaces {
     /// Whether Next Command should be toggleable for the current user, based on the active policies.
     /// Note that the value may be incorrect if called before the team's billing metadata has been fetched.
     pub fn is_next_command_enabled(&self) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return true;
+        }
+
         self.current_team()
             // If the user has no team, they can toggle Next Command (no restrictions).
             .is_none_or(|team| {
@@ -459,21 +479,27 @@ impl UserWorkspaces {
     /// If voice input support is not compiled into this build, always returns `false`.
     pub fn is_voice_enabled(&self) -> bool {
         cfg!(feature = "voice_input")
-            && self
-                .current_team()
-                // If the user has no team, they can toggle Voice (no restrictions).
-                .is_none_or(|team| {
-                    team.billing_metadata
-                        .tier
-                        .warp_ai_policy
-                        .is_some_and(|policy| policy.is_voice_enabled)
-                })
+            && (ChannelState::channel() == Channel::Oss
+                || self
+                    .current_team()
+                    // If the user has no team, they can toggle Voice (no restrictions).
+                    .is_none_or(|team| {
+                        team.billing_metadata
+                            .tier
+                            .warp_ai_policy
+                            .is_some_and(|policy| policy.is_voice_enabled)
+                    }))
     }
 
     /// Whether BYO API key is enabled for the current user, based on the active policies.
     /// Note that the value may be incorrect if called before the team's billing metadata has been fetched.
-    /// For solo users (no workspace), this is controlled by the `SoloUserByok` feature flag.
+    /// OSS builds always allow locally stored API keys. For solo users (no workspace), this is
+    /// controlled by the `SoloUserByok` feature flag in non-OSS builds.
     pub fn is_byo_api_key_enabled(&self) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return true;
+        }
+
         self.current_workspace()
             .map(|workspace| workspace.is_byo_api_key_enabled())
             .unwrap_or(FeatureFlag::SoloUserByok.is_enabled())

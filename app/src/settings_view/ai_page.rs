@@ -48,7 +48,7 @@ use itertools::Itertools;
 use regex::Regex;
 use settings::{Setting, ToggleableSetting};
 use strum::IntoEnumIterator;
-use warp_core::channel::ChannelState;
+use warp_core::channel::{Channel, ChannelState};
 use warp_core::context_flag::ContextFlag;
 use warp_core::features::FeatureFlag;
 use warp_core::ui::theme::color::internal_colors;
@@ -449,8 +449,17 @@ pub struct AISettingsPageView {
 }
 
 impl AISettingsPageView {
+    fn are_ai_settings_editable(app: &AppContext) -> bool {
+        AISettings::as_ref(app).are_ai_settings_editable(app)
+    }
+
+    fn are_active_ai_settings_editable(app: &AppContext) -> bool {
+        Self::are_ai_settings_editable(app)
+            && *AISettings::as_ref(app).is_active_ai_enabled_internal
+    }
+
     pub fn new(ctx: &mut ViewContext<Self>) -> Self {
-        let is_any_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
+        let are_ai_settings_editable = Self::are_ai_settings_editable(ctx);
 
         let workspace = UserWorkspaces::handle(ctx);
         let ai_autonomy_settings = workspace.as_ref(ctx).ai_autonomy_settings();
@@ -459,26 +468,26 @@ impl AISettingsPageView {
                 me.refresh_all_execution_profile_ui(ctx);
                 me.reset_execution_profile_mouse_state_handles(ctx);
 
-                let is_any_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
+                let are_ai_settings_editable = Self::are_ai_settings_editable(ctx);
                 let ai_autonomy_settings = workspace.as_ref(ctx).ai_autonomy_settings();
 
                 Self::update_editor_interaction_state(
                     me.command_denylist_editor.as_ref(ctx).editor().clone(),
-                    is_any_ai_enabled
+                    are_ai_settings_editable
                         && !ai_autonomy_settings.has_override_for_execute_commands_denylist(),
                     ctx,
                 );
 
                 Self::update_editor_interaction_state(
                     me.command_allowlist_editor.as_ref(ctx).editor().clone(),
-                    is_any_ai_enabled
+                    are_ai_settings_editable
                         && !ai_autonomy_settings.has_override_for_execute_commands_allowlist(),
                     ctx,
                 );
 
                 Self::update_editor_interaction_state(
                     me.directory_allowlist_editor.as_ref(ctx).editor().clone(),
-                    is_any_ai_enabled
+                    are_ai_settings_editable
                         && !ai_autonomy_settings.has_override_for_read_files_allowlist(),
                     ctx,
                 );
@@ -583,7 +592,7 @@ impl AISettingsPageView {
         });
         Self::update_editor_interaction_state(
             code_read_allowlist_editor.as_ref(ctx).editor().clone(),
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             ctx,
         );
 
@@ -628,7 +637,7 @@ impl AISettingsPageView {
         });
         Self::update_editor_interaction_state(
             autodetection_denylist_editor.clone(),
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             ctx,
         );
 
@@ -647,7 +656,7 @@ impl AISettingsPageView {
                 .as_ref(ctx)
                 .editor()
                 .clone(),
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             ctx,
         );
 
@@ -679,7 +688,7 @@ impl AISettingsPageView {
                 .as_ref(ctx)
                 .editor()
                 .clone(),
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             ctx,
         );
 
@@ -817,7 +826,7 @@ impl AISettingsPageView {
                     });
                 }
                 AISettingsChangedEvent::IsAnyAIEnabled { .. } => {
-                    let is_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
+                    let is_enabled = Self::are_ai_settings_editable(ctx);
                     let ai_autonomy_settings = UserWorkspaces::as_ref(ctx).ai_autonomy_settings();
 
                     Self::update_editor_interaction_state(
@@ -1192,7 +1201,7 @@ impl AISettingsPageView {
 
         Self::update_editor_interaction_state(
             directory_allowlist_editor.as_ref(ctx).editor().clone(),
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             ctx,
         );
 
@@ -1223,7 +1232,8 @@ impl AISettingsPageView {
         });
         Self::update_editor_interaction_state(
             command_denylist_editor.as_ref(ctx).editor().clone(),
-            is_any_ai_enabled && !ai_autonomy_settings.has_override_for_execute_commands_denylist(),
+            are_ai_settings_editable
+                && !ai_autonomy_settings.has_override_for_execute_commands_denylist(),
             ctx,
         );
 
@@ -1261,7 +1271,7 @@ impl AISettingsPageView {
         });
         Self::update_editor_interaction_state(
             command_allowlist_editor.as_ref(ctx).editor().clone(),
-            is_any_ai_enabled
+            are_ai_settings_editable
                 && !ai_autonomy_settings.has_override_for_execute_commands_allowlist(),
             ctx,
         );
@@ -1308,7 +1318,7 @@ impl AISettingsPageView {
         });
 
         add_profile_button.update(ctx, |button, ctx| {
-            button.set_disabled(!is_any_ai_enabled, ctx);
+            button.set_disabled(!are_ai_settings_editable, ctx);
         });
         let agent_toolbar_inline_editor = ctx.add_typed_action_view(|ctx| {
             AgentToolbarInlineEditor::new(AgentToolbarEditorMode::AgentView, ctx)
@@ -1583,7 +1593,7 @@ impl AISettingsPageView {
         ctx: &mut ViewContext<Self>,
     ) {
         menu.update(ctx, |menu, ctx| {
-            let disabled_by_ai_toggle = !AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
+            let disabled_by_ai_toggle = !Self::are_ai_settings_editable(ctx);
 
             if disabled_by_ai_toggle {
                 menu.set_disabled(ctx);
@@ -1618,7 +1628,7 @@ impl AISettingsPageView {
         ctx: &mut ViewContext<Self>,
     ) {
         menu.update(ctx, |menu, ctx| {
-            let disabled_by_ai_toggle = !AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
+            let disabled_by_ai_toggle = !Self::are_ai_settings_editable(ctx);
 
             if disabled_by_ai_toggle {
                 menu.set_disabled(ctx);
@@ -1656,7 +1666,7 @@ impl AISettingsPageView {
         ctx: &mut ViewContext<Self>,
     ) {
         menu.update(ctx, |menu, ctx| {
-            if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
+            if Self::are_ai_settings_editable(ctx) {
                 menu.set_enabled(ctx);
             } else {
                 menu.set_disabled(ctx);
@@ -1738,9 +1748,9 @@ impl AISettingsPageView {
         Self::refresh_mcp_allowlist_dropdown(&self.mcp_allowlist_dropdown, ctx);
         Self::refresh_mcp_denylist_dropdown(&self.mcp_denylist_dropdown, ctx);
 
-        let is_any_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
+        let are_ai_settings_editable = Self::are_ai_settings_editable(ctx);
         self.add_profile_button.update(ctx, |button, ctx| {
-            button.set_disabled(!is_any_ai_enabled, ctx);
+            button.set_disabled(!are_ai_settings_editable, ctx);
         });
     }
 
@@ -1834,7 +1844,7 @@ impl AISettingsPageView {
         ctx: &mut ViewContext<Self>,
     ) {
         menu.update(ctx, |menu, ctx| {
-            if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
+            if Self::are_ai_settings_editable(ctx) {
                 menu.set_enabled(ctx);
             } else {
                 menu.set_disabled(ctx);
@@ -1897,7 +1907,7 @@ impl AISettingsPageView {
     {
         let mcps_in_dropdown = Self::get_non_allowlisted_or_denylisted_mcp_servers(ctx);
         menu.update(ctx, |menu, ctx| {
-            if AISettings::as_ref(ctx).is_any_ai_enabled(ctx) {
+            if Self::are_ai_settings_editable(ctx) {
                 menu.set_enabled(ctx);
             } else {
                 menu.set_disabled(ctx);
@@ -3033,19 +3043,19 @@ fn render_ai_list(
     description: &str,
     input_list: Box<dyn Element>,
     view: &AISettingsPageView,
-    ai_settings: &AISettings,
+    _ai_settings: &AISettings,
     app: &AppContext,
 ) -> Box<dyn Element> {
     let setting_header = render_ai_setting_label::<AgentModeCommandExecutionDenylist>(
         header.to_string(),
-        ai_settings.is_any_ai_enabled(app),
+        AISettingsPageView::are_ai_settings_editable(app),
         &view.local_only_icon_tooltip_states,
         app,
     );
 
     let description = render_ai_setting_description(
         description.to_string(),
-        ai_settings.is_any_ai_enabled(app),
+        AISettingsPageView::are_ai_settings_editable(app),
         app,
     );
 
@@ -3080,9 +3090,11 @@ impl SettingsWidget for GlobalAIWidget {
         let is_ai_disabled_due_to_remote_session_org_policy =
             AISettings::as_ref(app).is_ai_disabled_due_to_remote_session_org_policy(app);
 
-        let is_anonymous = AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out();
+        let is_oss_build = ChannelState::channel() == Channel::Oss;
+        let is_anonymous = !is_oss_build
+            && AuthStateProvider::as_ref(app)
+                .get()
+                .is_anonymous_or_logged_out();
 
         let mut row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
@@ -3174,7 +3186,11 @@ impl SettingsWidget for GlobalAIWidget {
                 Container::new(
                     ui_builder
                         .switch(self.switch_state.clone())
-                        .check(AISettings::as_ref(app).is_any_ai_enabled(app))
+                        .check(if is_oss_build {
+                            *AISettings::as_ref(app).is_any_ai_enabled
+                        } else {
+                            AISettings::as_ref(app).is_any_ai_enabled(app)
+                        })
                         .build()
                         .on_click(move |ctx, _, _| {
                             ctx.dispatch_typed_action(AISettingsPageAction::ToggleGlobalAI);
@@ -3532,9 +3548,10 @@ impl ActiveAIWidget {
                 .is_some_and(|team| {
                     team.billing_metadata.customer_type == CustomerType::Enterprise
                 })
-                // Override the enterprise check for dogfood builds, as our dogfood team
-                // is an enterprise team.
-                || ChannelState::channel().is_dogfood())
+                // Override the enterprise check for dogfood and OSS builds, as these are not
+                // gated by hosted billing plans.
+                || ChannelState::channel().is_dogfood()
+                || ChannelState::channel() == Channel::Oss)
     }
 
     fn is_git_operations_autogen_toggleable(&self, app: &AppContext) -> bool {
@@ -3551,7 +3568,7 @@ impl ActiveAIWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_active_ai_settings_editable(app);
 
         Flex::column()
             .with_child(
@@ -3579,7 +3596,7 @@ impl ActiveAIWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_active_ai_settings_editable(app);
         Flex::column()
             .with_child(
                 render_ai_setting_toggle::<AgentModeQuerySuggestionsEnabled>(
@@ -3606,7 +3623,7 @@ impl ActiveAIWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_active_ai_settings_editable(app);
         Flex::column()
             .with_child(
                 render_ai_setting_toggle::<AgentModeQuerySuggestionsEnabled>(
@@ -3633,7 +3650,7 @@ impl ActiveAIWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_active_ai_settings_editable(app);
         Flex::column()
             .with_child(render_ai_setting_toggle::<
                 NaturalLanguageAutosuggestionsEnabled,
@@ -3660,7 +3677,7 @@ impl ActiveAIWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_active_ai_settings_editable(app);
         Flex::column()
             .with_child(
                 render_ai_setting_toggle::<SharedBlockTitleGenerationEnabled>(
@@ -3687,7 +3704,7 @@ impl ActiveAIWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_active_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_active_ai_settings_editable(app);
         Flex::column()
             .with_child(render_ai_setting_toggle::<GitOperationsAutogenEnabled>(
                 "Commit & Pull Request Generation",
@@ -3730,7 +3747,7 @@ impl SettingsWidget for ActiveAIWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         let mut column = Flex::column()
             .with_child(render_separator(appearance))
             .with_child(
@@ -3742,7 +3759,7 @@ impl SettingsWidget for ActiveAIWidget {
                             build_sub_header(
                                 appearance,
                                 "Active AI",
-                                Some(styles::header_font_color(is_any_ai_enabled, app)),
+                                Some(styles::header_font_color(are_ai_settings_editable, app)),
                             )
                             .finish(),
                         )
@@ -3750,7 +3767,7 @@ impl SettingsWidget for ActiveAIWidget {
                             Container::new(render_ai_feature_switch(
                                 self.active_ai_toggle.clone(),
                                 *ai_settings.is_active_ai_enabled_internal,
-                                is_any_ai_enabled,
+                                are_ai_settings_editable,
                                 AISettingsPageAction::ToggleActiveAI,
                                 app,
                             ))
@@ -3816,7 +3833,7 @@ impl SettingsWidget for AgentsWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
 
         let mut column = Flex::column();
 
@@ -3833,14 +3850,14 @@ impl SettingsWidget for AgentsWidget {
                 build_sub_header(
                     appearance,
                     "Agents",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
             );
             agents_header.add_child(render_ai_setting_description(
                 "Set the boundaries for how your Agent operates. Choose what it can access, how much autonomy it has, and when it must ask for your approval. You can also fine-tune behavior around natural language input, codebase awareness, and more.",
-                ai_settings.is_any_ai_enabled(app),
+                are_ai_settings_editable,
                 app,
             ));
             let agents_header = agents_header.finish();
@@ -3868,18 +3885,18 @@ impl AgentsWidget {
     fn render_profiles_section(
         &self,
         view: &AISettingsPageView,
-        ai_settings: &AISettings,
+        _ai_settings: &AISettings,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
 
         let header_and_description = Flex::column()
             .with_child(
                 build_sub_header(
                     appearance,
                     "Profiles",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .finish(),
             )
@@ -3887,7 +3904,7 @@ impl AgentsWidget {
                 Container::new(
                     render_ai_setting_description(
                         "Profiles let you define how your Agent operates — from the actions it can take and when it needs approval, to the models it uses for tasks like coding and planning. You can also scope them to individual projects.",
-                        is_any_ai_enabled,
+                        are_ai_settings_editable,
                         app,
                     )
                 )
@@ -3933,12 +3950,12 @@ impl AgentsWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         let model_subheader = Container::new(render_custom_size_header(
             appearance,
             "Models",
             14.0,
-            Some(styles::header_font_color(is_any_ai_enabled, app)),
+            Some(styles::header_font_color(are_ai_settings_editable, app)),
         ))
         .with_margin_bottom(8.0)
         .finish();
@@ -3960,12 +3977,12 @@ impl AgentsWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         let permissions_subheader = Container::new(render_custom_size_header(
             appearance,
             "Permissions",
             14.0,
-            Some(styles::header_font_color(is_any_ai_enabled, app)),
+            Some(styles::header_font_color(are_ai_settings_editable, app)),
         ))
         .with_margin_bottom(4.0)
         .finish();
@@ -4116,7 +4133,7 @@ impl AgentsWidget {
         header_icon: Icon,
         permission_description: &'static str,
         dropdown_menu: &ViewHandle<Dropdown<AISettingsPageAction>>,
-        ai_settings: &AISettings,
+        _ai_settings: &AISettings,
         appearance: &Appearance,
         app: &warpui::AppContext,
     ) -> Box<dyn Element> {
@@ -4124,7 +4141,7 @@ impl AgentsWidget {
             header_text.into(),
             header_icon,
             Some(styles::header_font_color(
-                ai_settings.is_any_ai_enabled(app),
+                AISettingsPageView::are_ai_settings_editable(app),
                 app,
             )),
             None,
@@ -4277,7 +4294,7 @@ impl AgentsWidget {
     fn render_base_model_setting(
         &self,
         view: &AISettingsPageView,
-        ai_settings: &AISettings,
+        _ai_settings: &AISettings,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -4290,7 +4307,7 @@ impl AgentsWidget {
                 .checkbox(self.show_in_prompt_checkbox.clone(), None)
                 .check(is_checked);
 
-            if !ai_settings.is_any_ai_enabled(app) {
+            if !AISettingsPageView::are_ai_settings_editable(app) {
                 checkbox = checkbox.disabled();
             }
 
@@ -4334,7 +4351,7 @@ impl AgentsWidget {
             ),
             Some(show_in_prompt_checkbox),
             LocalOnlyIconState::Hidden,
-            (!ai_settings.is_any_ai_enabled(app))
+            (!AISettingsPageView::are_ai_settings_editable(app))
                 .then(|| appearance.theme().disabled_ui_text_color()),
             &view.base_model_dropdown,
         )
@@ -4344,7 +4361,7 @@ impl AgentsWidget {
         codebase_context_toggle: SwitchStateHandle,
         codebase_context_link_index: HighlightedHyperlink,
         view: &AISettingsPageView,
-        ai_settings: &AISettings,
+        _ai_settings: &AISettings,
         appearance: &Appearance,
         app: &warpui::AppContext,
     ) -> Box<dyn Element> {
@@ -4353,7 +4370,7 @@ impl AgentsWidget {
             "Codebase Context",
             AISettingsPageAction::ToggleCodebaseContext,
             *code_settings.codebase_context_enabled,
-            ai_settings.is_any_ai_enabled(app),
+            AISettingsPageView::are_ai_settings_editable(app),
             codebase_context_toggle,
             &view.local_only_icon_tooltip_states,
             app,
@@ -4374,7 +4391,11 @@ impl AgentsWidget {
                 CONTENT_FONT_SIZE,
                 appearance.ui_font_family(),
                 appearance.ui_font_family(),
-                styles::description_font_color(ai_settings.is_any_ai_enabled(app), app).into(),
+                styles::description_font_color(
+                    AISettingsPageView::are_ai_settings_editable(app),
+                    app,
+                )
+                .into(),
                 codebase_context_link_index,
             )
             .with_hyperlink_font_color(appearance.theme().accent().into_solid())
@@ -4412,7 +4433,7 @@ impl AgentsWidget {
 
     fn render_mcp_permissions_zero_state(
         &self,
-        ai_settings: &AISettings,
+        _ai_settings: &AISettings,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -4420,7 +4441,7 @@ impl AgentsWidget {
             "Call MCP servers".into(),
             Icon::Dataflow,
             Some(styles::header_font_color(
-                ai_settings.is_any_ai_enabled(app),
+                AISettingsPageView::are_ai_settings_editable(app),
                 app,
             )),
             None,
@@ -4453,7 +4474,11 @@ impl AgentsWidget {
                     CONTENT_FONT_SIZE,
                     appearance.ui_font_family(),
                     appearance.ui_font_family(),
-                    styles::description_font_color(ai_settings.is_any_ai_enabled(app), app).into(),
+                    styles::description_font_color(
+                        AISettingsPageView::are_ai_settings_editable(app),
+                        app,
+                    )
+                    .into(),
                     HighlightedHyperlink::default(),
                 )
                 .with_hyperlink_font_color(appearance.theme().accent().into_solid())
@@ -4557,7 +4582,7 @@ impl AgentsWidget {
         items: Vec<uuid::Uuid>,
         mouse_state_handles: Vec<MouseStateHandle>,
         action: impl Fn(uuid::Uuid) -> AISettingsPageAction,
-        ai_settings: &AISettings,
+        _ai_settings: &AISettings,
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
@@ -4572,7 +4597,7 @@ impl AgentsWidget {
                             title.to_string(),
                             Some(description.to_string()),
                             LocalOnlyIconState::Hidden,
-                            (!ai_settings.is_any_ai_enabled(app))
+                            (!AISettingsPageView::are_ai_settings_editable(app))
                                 .then(|| appearance.theme().disabled_ui_text_color()),
                             appearance,
                         ))
@@ -4602,7 +4627,7 @@ impl AgentsWidget {
                     })
                 }),
             None,
-            !ai_settings.is_any_ai_enabled(app),
+            !AISettingsPageView::are_ai_settings_editable(app),
             appearance,
         );
 
@@ -4636,12 +4661,12 @@ impl SettingsWidget for AIInputWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
 
         let input_header = build_sub_header(
             appearance,
             "Input",
-            Some(styles::header_font_color(is_any_ai_enabled, app)),
+            Some(styles::header_font_color(are_ai_settings_editable, app)),
         )
         .with_padding_bottom(HEADER_PADDING)
         .finish();
@@ -4660,7 +4685,7 @@ impl SettingsWidget for AIInputWidget {
             "Show input hint text",
             AISettingsPageAction::ToggleShowInputHintText,
             *InputSettings::as_ref(app).show_hint_text,
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             self.show_input_hint_toggle.clone(),
             &view.local_only_icon_tooltip_states,
             app,
@@ -4678,7 +4703,7 @@ impl SettingsWidget for AIInputWidget {
                 "Show agent tips",
                 AISettingsPageAction::ToggleShowAgentTips,
                 *InputSettings::as_ref(app).show_agent_tips,
-                is_any_ai_enabled,
+                are_ai_settings_editable,
                 self.show_agent_tips_toggle.clone(),
                 &view.local_only_icon_tooltip_states,
                 app,
@@ -4690,7 +4715,7 @@ impl SettingsWidget for AIInputWidget {
             "Include agent-executed commands in history",
             AISettingsPageAction::ToggleIncludeAgentCommandsInHistory,
             *ai_settings.include_agent_commands_in_history,
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             self.include_agent_commands_in_history_toggle.clone(),
             &view.local_only_icon_tooltip_states,
             app,
@@ -4710,7 +4735,7 @@ impl AIInputWidget {
         appearance: &Appearance,
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
-        let is_toggleable = ai_settings.is_any_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_ai_settings_editable(app);
         let is_nld_enabled = *ai_settings.ai_autodetection_enabled_internal.value();
 
         let autodetection_denylist_input_field = appearance
@@ -4889,13 +4914,13 @@ impl SettingsWidget for MCPServersWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         let ai_settings = AISettings::as_ref(app);
 
         let header = build_sub_header(
             appearance,
             "MCP Servers",
-            Some(styles::header_font_color(is_any_ai_enabled, app)),
+            Some(styles::header_font_color(are_ai_settings_editable, app)),
         )
         .with_padding_bottom(HEADER_PADDING)
         .finish();
@@ -4917,7 +4942,7 @@ impl SettingsWidget for MCPServersWidget {
                 CONTENT_FONT_SIZE,
                 appearance.ui_font_family(),
                 appearance.ui_font_family(),
-                styles::description_font_color(is_any_ai_enabled, app).into(),
+                styles::description_font_color(are_ai_settings_editable, app).into(),
                 self.mcp_docs_link_index.clone(),
             )
             .with_hyperlink_font_color(appearance.theme().accent().into_solid())
@@ -4938,7 +4963,7 @@ impl SettingsWidget for MCPServersWidget {
                         "Auto-spawn servers from third-party agents",
                         AISettingsPageAction::ToggleFileBasedMcp,
                         *ai_settings.file_based_mcp_enabled,
-                        is_any_ai_enabled,
+                        are_ai_settings_editable,
                         self.file_based_mcp_toggle.clone(),
                         &view.local_only_icon_tooltip_states,
                         app,
@@ -4965,7 +4990,8 @@ impl SettingsWidget for MCPServersWidget {
                                 CONTENT_FONT_SIZE,
                                 appearance.ui_font_family(),
                                 appearance.ui_font_family(),
-                                styles::description_font_color(is_any_ai_enabled, app).into(),
+                                styles::description_font_color(are_ai_settings_editable, app)
+                                    .into(),
                                 self.file_based_mcp_docs_link_index.clone(),
                             )
                             .with_hyperlink_font_color(appearance.theme().accent().into_solid())
@@ -4987,7 +5013,7 @@ impl SettingsWidget for MCPServersWidget {
 
         let button = render_full_pane_width_ai_button(
             "Manage MCP servers",
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             self.manage_mcp_servers_button.clone(),
             AISettingsPageAction::OpenMCPServerCollection,
             appearance,
@@ -5026,7 +5052,7 @@ impl AIFactWidget {
             "Rules",
             AISettingsPageAction::ToggleRules,
             *ai_settings.memory_enabled,
-            ai_settings.is_any_ai_enabled(app),
+            AISettingsPageView::are_ai_settings_editable(app),
             self.rules_toggle.clone(),
             &view.local_only_icon_tooltip_states,
             app,
@@ -5047,7 +5073,11 @@ impl AIFactWidget {
                 CONTENT_FONT_SIZE,
                 appearance.ui_font_family(),
                 appearance.ui_font_family(),
-                styles::description_font_color(ai_settings.is_any_ai_enabled(app), app).into(),
+                styles::description_font_color(
+                    AISettingsPageView::are_ai_settings_editable(app),
+                    app,
+                )
+                .into(),
                 self.rules_link_index.clone(),
             )
             .with_hyperlink_font_color(appearance.theme().accent().into_solid())
@@ -5077,7 +5107,7 @@ impl AIFactWidget {
             "Suggested Rules",
             AISettingsPageAction::ToggleRuleSuggestions,
             *ai_settings.rule_suggestions_enabled_internal,
-            ai_settings.is_any_ai_enabled(app),
+            AISettingsPageView::are_ai_settings_editable(app),
             self.rule_suggestions_toggle.clone(),
             &view.local_only_icon_tooltip_states,
             app,
@@ -5085,7 +5115,7 @@ impl AIFactWidget {
 
         let description = render_ai_setting_description(
             "Let AI suggest rules to save based on your interactions.",
-            ai_settings.is_any_ai_enabled(app),
+            AISettingsPageView::are_ai_settings_editable(app),
             app,
         );
 
@@ -5105,7 +5135,7 @@ impl AIFactWidget {
             "Warp Drive as agent context",
             AISettingsPageAction::ToggleWarpDriveContext,
             *ai_settings.warp_drive_context_enabled,
-            ai_settings.is_any_ai_enabled(app),
+            AISettingsPageView::are_ai_settings_editable(app),
             self.warp_drive_context_toggle.clone(),
             &view.local_only_icon_tooltip_states,
             app,
@@ -5113,7 +5143,7 @@ impl AIFactWidget {
 
         let description = render_ai_setting_description(
             "The Warp Agent can leverage your Warp Drive Contents to tailor responses to your personal and team developer workflows and environments. This includes any Workflows, Notebooks, and Environment Variables.",
-            ai_settings.is_any_ai_enabled(app),
+            AISettingsPageView::are_ai_settings_editable(app),
             app,
         );
 
@@ -5142,19 +5172,19 @@ impl SettingsWidget for AIFactWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
 
         let header = build_sub_header(
             appearance,
             "Knowledge",
-            Some(styles::header_font_color(is_any_ai_enabled, app)),
+            Some(styles::header_font_color(are_ai_settings_editable, app)),
         )
         .with_margin_bottom(HEADER_PADDING)
         .finish();
 
         let button = render_full_pane_width_ai_button(
             "Manage rules",
-            is_any_ai_enabled,
+            are_ai_settings_editable,
             self.manage_rules_button.clone(),
             AISettingsPageAction::OpenAIFactCollection,
             appearance,
@@ -5189,7 +5219,7 @@ impl VoiceWidget {
         app: &warpui::AppContext,
     ) -> Box<dyn warpui::Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_toggleable = ai_settings.is_any_ai_enabled(app);
+        let is_toggleable = AISettingsPageView::are_ai_settings_editable(app);
         let mut column = Flex::column().with_child(render_ai_setting_toggle::<VoiceInputEnabled>(
             "Voice Input",
             AISettingsPageAction::ToggleVoiceInput,
@@ -5231,7 +5261,7 @@ impl VoiceWidget {
                 .finish(),
         );
 
-        if ai_settings.is_voice_input_enabled(app) {
+        if is_toggleable && *ai_settings.voice_input_enabled_internal {
             column.add_child(render_dropdown_item(
                 appearance,
                 "Key for Activating Voice Input",
@@ -5269,15 +5299,14 @@ impl SettingsWidget for VoiceWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         Flex::column()
             .with_child(render_separator(appearance))
             .with_child(
                 build_sub_header(
                     appearance,
                     "Voice",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
@@ -5331,8 +5360,8 @@ impl SettingsWidget for OtherAIWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
-        let is_toggleable = is_any_ai_enabled;
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
+        let is_toggleable = are_ai_settings_editable;
 
         let mut column = Flex::column()
             .with_child(render_separator(appearance))
@@ -5340,7 +5369,7 @@ impl SettingsWidget for OtherAIWidget {
                 build_sub_header(
                     appearance,
                     "Other",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
@@ -5403,7 +5432,7 @@ impl SettingsWidget for OtherAIWidget {
                 &mut view.local_only_icon_tooltip_states.borrow_mut(),
                 app,
             ),
-            (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
+            (!are_ai_settings_editable).then(|| appearance.theme().disabled_ui_text_color()),
             &view.thinking_display_mode_dropdown,
         ));
 
@@ -5424,7 +5453,7 @@ impl SettingsWidget for OtherAIWidget {
                     &mut view.local_only_icon_tooltip_states.borrow_mut(),
                     app,
                 ),
-                (!is_any_ai_enabled).then(|| appearance.theme().disabled_ui_text_color()),
+                (!are_ai_settings_editable).then(|| appearance.theme().disabled_ui_text_color()),
                 &view.conversation_layout_dropdown,
             ));
         }
@@ -5767,13 +5796,13 @@ impl SettingsWidget for AgentAttributionWidget {
         app: &AppContext,
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
 
         let org_setting = UserWorkspaces::as_ref(app).get_agent_attribution_setting();
         let state = derive_agent_attribution_toggle_state(
             &org_setting,
             *ai_settings.agent_attribution_enabled,
-            is_any_ai_enabled,
+            are_ai_settings_editable,
         );
 
         let ui_builder = appearance.ui_builder();
@@ -5788,7 +5817,7 @@ impl SettingsWidget for AgentAttributionWidget {
                 .disable()
                 .build()
                 .finish()
-        } else if !is_any_ai_enabled {
+        } else if !are_ai_settings_editable {
             ui_builder
                 .switch(self.toggle.clone())
                 .check(state.is_enabled)
@@ -5826,7 +5855,7 @@ impl SettingsWidget for AgentAttributionWidget {
                 build_sub_header(
                     appearance,
                     "Agent Attribution",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
@@ -5866,7 +5895,7 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
     ) -> Box<dyn Element> {
         use crate::ai::execution_profiles::{CloudAgentComputerUseState, ComputerUsePermission};
 
-        let is_any_ai_enabled = AISettings::as_ref(app).is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
 
         // Determine toggle state based on workspace autonomy setting and user preference
         let CloudAgentComputerUseState {
@@ -5874,8 +5903,8 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
             is_forced_by_org,
         } = ComputerUsePermission::resolve_cloud_agent_state(app);
 
-        // Toggle is disabled if forced by org settings OR if AI is globally disabled
-        let is_disabled = is_forced_by_org || !is_any_ai_enabled;
+        // Toggle is disabled if forced by org settings OR if AI settings cannot be edited.
+        let is_disabled = is_forced_by_org || !are_ai_settings_editable;
 
         let ui_builder = appearance.ui_builder();
         let toggle = if is_forced_by_org {
@@ -5890,8 +5919,8 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
                 .disable()
                 .build()
                 .finish()
-        } else if !is_any_ai_enabled {
-            // Disabled because AI is off globally - no tooltip needed
+        } else if !are_ai_settings_editable {
+            // Disabled because AI settings are not editable - no tooltip needed
             ui_builder
                 .switch(self.toggle.clone())
                 .check(is_checked)
@@ -5930,7 +5959,7 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
                 build_sub_header(
                     appearance,
                     "Experimental",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
@@ -5948,14 +5977,14 @@ impl SettingsWidget for CloudAgentComputerUseWidget {
                 "Orchestration",
                 AISettingsPageAction::ToggleOrchestration,
                 *ai_settings.orchestration_enabled,
-                is_any_ai_enabled,
+                are_ai_settings_editable,
                 self.orchestration_toggle.clone(),
                 &view.local_only_icon_tooltip_states,
                 app,
             ));
             column.add_child(render_ai_setting_description(
                 "Enable multi-agent orchestration, allowing the agent to spawn and coordinate parallel sub-agents.",
-                is_any_ai_enabled,
+                are_ai_settings_editable,
                 app,
             ));
         }
@@ -5974,11 +6003,21 @@ struct ApiKeysWidget {
 }
 
 impl ApiKeysWidget {
+    fn is_oss_build() -> bool {
+        ChannelState::channel() == Channel::Oss
+    }
+
+    fn api_key_inputs_enabled(is_any_ai_enabled: bool, is_byo_enabled: bool) -> bool {
+        is_byo_enabled && (is_any_ai_enabled || Self::is_oss_build())
+    }
+
     fn new(ctx: &mut ViewContext<<Self as SettingsWidget>::View>) -> Self {
         let ai_settings = AISettings::as_ref(ctx);
         let workspace_handle = UserWorkspaces::handle(ctx);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(ctx);
         let is_byo_enabled = workspace_handle.as_ref(ctx).is_byo_api_key_enabled();
+        let api_key_inputs_enabled =
+            Self::api_key_inputs_enabled(is_any_ai_enabled, is_byo_enabled);
 
         let ApiKeys {
             openai: openai_key,
@@ -6016,7 +6055,7 @@ impl ApiKeysWidget {
                 });
                 AISettingsPageView::update_editor_interaction_state(
                     $editor.clone(),
-                    is_any_ai_enabled && is_byo_enabled,
+                    api_key_inputs_enabled,
                     ctx,
                 );
                 ctx.subscribe_to_view(&$editor, |_, $editor, event, ctx| {
@@ -6034,7 +6073,8 @@ impl ApiKeysWidget {
                         let is_any_ai_enabled =
                             AISettings::handle(ctx).as_ref(ctx).is_any_ai_enabled(ctx);
                         let is_byo_enabled = workspace.as_ref(ctx).is_byo_api_key_enabled();
-                        let is_enabled = is_any_ai_enabled && is_byo_enabled;
+                        let is_enabled =
+                            Self::api_key_inputs_enabled(is_any_ai_enabled, is_byo_enabled);
                         let has_key = !editor_clone.as_ref(ctx).is_empty(ctx);
 
                         // If BYO is disabled, clear the API key from the editor and storage
@@ -6090,21 +6130,20 @@ impl ApiKeysWidget {
     ) -> Box<dyn Element> {
         let ai_settings = AISettings::as_ref(app);
         let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
-        let is_enabled = is_any_ai_enabled && is_byo_enabled;
+        let is_enabled = Self::api_key_inputs_enabled(is_any_ai_enabled, is_byo_enabled);
+        let description = if Self::is_oss_build() {
+            "Use your own provider API keys for Warp Agent requests without a Warp plan gate. API keys are stored locally and included only with agent requests to the configured Warp-compatible server endpoint; direct local provider execution is not yet implemented."
+        } else {
+            "Use your own API keys from model providers for the Warp Agent to use. API keys are stored locally and never synced to the cloud. Using auto models or models from providers you have not provided API keys for will consume Warp credits."
+        };
 
-        let mut column = Flex::column()
-            .with_spacing(16.)
-            .with_child(
-                Container::new(
-                    render_ai_setting_description(
-                        "Use your own API keys from model providers for the Warp Agent to use. API keys are stored locally and never synced to the cloud. Using auto models or models from providers you have not provided API keys for will consume Warp credits.",
-                        is_enabled,
-                        app,
-                    ))
+        let mut column = Flex::column().with_spacing(16.).with_child(
+            Container::new(render_ai_setting_description(description, is_enabled, app))
                 // Remove the bottom margin of the description so that it doesn't
                 // create extra space between the description and the API key inputs.
-                .with_margin_bottom(-styles::DESCRIPTION_MARGIN_BOTTOM).finish()
-            );
+                .with_margin_bottom(-styles::DESCRIPTION_MARGIN_BOTTOM)
+                .finish(),
+        );
 
         /// Helper function to render the UI for an API key input field.
         fn render_api_key_input(
@@ -6270,8 +6309,7 @@ impl SettingsWidget for ApiKeysWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         let is_byo_enabled = UserWorkspaces::as_ref(app).is_byo_api_key_enabled();
 
         let mut column = Flex::column()
@@ -6280,14 +6318,14 @@ impl SettingsWidget for ApiKeysWidget {
                 build_sub_header(
                     appearance,
                     "API Keys",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
             )
             .with_child(self.render_api_keys_section(appearance, app, is_byo_enabled));
 
-        if is_byo_enabled {
+        if is_byo_enabled && !ApiKeysWidget::is_oss_build() {
             column.add_child(
                 Container::new(self.render_can_use_warp_credits_with_byok_toggle(view, app))
                     .with_margin_top(16.)
@@ -6312,11 +6350,11 @@ struct AwsBedrockWidget {
 impl AwsBedrockWidget {
     fn new(ctx: &mut ViewContext<<Self as SettingsWidget>::View>) -> Self {
         let ai_settings = AISettings::as_ref(ctx);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(ctx);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(ctx);
 
         let aws_auth_refresh_command = ai_settings.aws_bedrock_auth_refresh_command.value().clone();
         let aws_auth_refresh_profile = ai_settings.aws_bedrock_profile.value().clone();
-        let is_usage_enabled = is_any_ai_enabled
+        let is_usage_enabled = are_ai_settings_editable
             && UserWorkspaces::as_ref(ctx).is_aws_bedrock_credentials_enabled(ctx);
 
         let aws_auth_refresh_command_editor = ctx.add_typed_action_view(move |ctx| {
@@ -6435,8 +6473,8 @@ impl AwsBedrockWidget {
                 AISettingsChangedEvent::IsAnyAIEnabled { .. }
                     | AISettingsChangedEvent::AwsBedrockCredentialsEnabled { .. }
             ) {
-                let is_any_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
-                let is_usage_enabled = is_any_ai_enabled
+                let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(ctx);
+                let is_usage_enabled = are_ai_settings_editable
                     && UserWorkspaces::as_ref(ctx).is_aws_bedrock_credentials_enabled(ctx);
 
                 AISettingsPageView::update_editor_interaction_state(
@@ -6464,8 +6502,9 @@ impl AwsBedrockWidget {
             &UserWorkspaces::handle(ctx),
             move |_, workspace, event, ctx| {
                 if let UserWorkspacesEvent::TeamsChanged = event {
-                    let is_any_ai_enabled = AISettings::as_ref(ctx).is_any_ai_enabled(ctx);
-                    let is_usage_enabled = is_any_ai_enabled
+                    let are_ai_settings_editable =
+                        AISettingsPageView::are_ai_settings_editable(ctx);
+                    let is_usage_enabled = are_ai_settings_editable
                         && workspace
                             .as_ref(ctx)
                             .is_aws_bedrock_credentials_enabled(ctx);
@@ -6504,10 +6543,9 @@ impl AwsBedrockWidget {
         app: &AppContext,
         is_bedrock_available: bool,
     ) -> Box<dyn Element> {
-        let ai_settings = AISettings::as_ref(app);
         let user_workspaces = UserWorkspaces::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
-        let is_section_enabled = is_any_ai_enabled && is_bedrock_available;
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
+        let is_section_enabled = are_ai_settings_editable && is_bedrock_available;
         let is_admin_enforced = matches!(
             user_workspaces.aws_bedrock_host_enablement_setting(),
             crate::workspaces::workspace::HostEnablementSetting::Enforce
@@ -6716,8 +6754,7 @@ impl SettingsWidget for AwsBedrockWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        let ai_settings = AISettings::as_ref(app);
-        let is_any_ai_enabled = ai_settings.is_any_ai_enabled(app);
+        let are_ai_settings_editable = AISettingsPageView::are_ai_settings_editable(app);
         let is_bedrock_available =
             UserWorkspaces::as_ref(app).is_aws_bedrock_available_from_workspace();
 
@@ -6727,7 +6764,7 @@ impl SettingsWidget for AwsBedrockWidget {
                 build_sub_header(
                     appearance,
                     "AWS Bedrock",
-                    Some(styles::header_font_color(is_any_ai_enabled, app)),
+                    Some(styles::header_font_color(are_ai_settings_editable, app)),
                 )
                 .with_padding_bottom(HEADER_PADDING)
                 .finish(),
