@@ -2318,6 +2318,17 @@ pub fn init_feature_flags() {
     features::mark_initialized();
 }
 
+/// Returns true if the given env var is set to a truthy value (`1`, `true`, `yes`, case-insensitive).
+fn env_flag_truthy(name: &str) -> bool {
+    match std::env::var(name) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => false,
+    }
+}
+
 /// Returns all feature flags which should be enabled in the current channel.
 pub fn enabled_features() -> HashSet<FeatureFlag> {
     // Enable features overridden for the given channel.
@@ -2782,6 +2793,18 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         #[cfg(feature = "cloud_mode_input_v2")]
         FeatureFlag::CloudModeInputV2,
     ]);
+
+    // OSS / local-dev escape hatch: setting `WARP_ENABLE_ALL_FEATURE_FLAGS=1` turns on every
+    // runtime `FeatureFlag` variant. This affects only the runtime layer; Cargo features
+    // (e.g. `plugin_host`, `voice_input`, `crash_reporting`) are compile-time and still need
+    // `cargo run --features=<list>` to be included in the binary. Some flags are server- or
+    // plan-gated and may have no visible effect, but UI/experimental flags become available.
+    if env_flag_truthy("WARP_ENABLE_ALL_FEATURE_FLAGS") {
+        eprintln!(
+            "WARP_ENABLE_ALL_FEATURE_FLAGS is set: enabling every runtime FeatureFlag variant.",
+        );
+        flags.extend(enum_iterator::all::<FeatureFlag>());
+    }
 
     flags
 }
