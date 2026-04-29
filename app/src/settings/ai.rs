@@ -25,6 +25,7 @@ use warpui::{
 use settings::{
     define_settings_group, RespectUserSyncSetting, Setting, SupportedPlatforms, SyncToCloud,
 };
+use warp_core::channel::{Channel, ChannelState};
 use warp_core::execution_mode::AppExecutionMode;
 use warp_core::features::FeatureFlag;
 
@@ -1507,6 +1508,14 @@ impl AISettings {
             && !self.is_ai_disabled_due_to_remote_session_org_policy(app)
     }
 
+    pub fn are_ai_settings_editable(&self, app: &AppContext) -> bool {
+        if ChannelState::channel() == Channel::Oss {
+            return *self.is_any_ai_enabled;
+        }
+
+        self.is_any_ai_enabled(app)
+    }
+
     pub fn default_session_mode(&self, app: &AppContext) -> DefaultSessionMode {
         let mode = *self.default_session_mode_internal.value();
         match mode {
@@ -1732,7 +1741,7 @@ impl AISettings {
             .ai_autonomy_settings()
             .has_override_for_execute_commands_denylist();
 
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_command_allowlist_editable(&self, app: &AppContext) -> bool {
@@ -1740,7 +1749,7 @@ impl AISettings {
             .ai_autonomy_settings()
             .has_override_for_execute_commands_allowlist();
 
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_directory_allowlist_editable(&self, app: &AppContext) -> bool {
@@ -1748,7 +1757,7 @@ impl AISettings {
             .ai_autonomy_settings()
             .has_override_for_read_files_allowlist();
 
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_execute_commands_permissions_editable(&self, app: &AppContext) -> bool {
@@ -1756,21 +1765,21 @@ impl AISettings {
             .ai_autonomy_settings()
             .has_override_for_execute_commands();
 
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_write_to_pty_permissions_editable(&self, app: &AppContext) -> bool {
         let set_by_workspace = UserWorkspaces::as_ref(app)
             .ai_autonomy_settings()
             .has_override_for_write_to_pty();
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_computer_use_permissions_editable(&self, app: &AppContext) -> bool {
         let set_by_workspace = UserWorkspaces::as_ref(app)
             .ai_autonomy_settings()
             .has_override_for_computer_use();
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_read_files_permissions_editable(&self, app: &AppContext) -> bool {
@@ -1778,7 +1787,7 @@ impl AISettings {
             .ai_autonomy_settings()
             .has_override_for_read_files();
 
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_code_diffs_permissions_editable(&self, app: &AppContext) -> bool {
@@ -1786,16 +1795,16 @@ impl AISettings {
             .ai_autonomy_settings()
             .has_override_for_code_diffs();
 
-        self.is_any_ai_enabled(app) && !set_by_workspace
+        self.are_ai_settings_editable(app) && !set_by_workspace
     }
 
     pub fn is_ask_user_question_permissions_editable(&self, app: &AppContext) -> bool {
-        self.is_any_ai_enabled(app)
+        self.are_ai_settings_editable(app)
     }
 
     pub fn is_mcp_permission_editable(&self, app: &AppContext) -> bool {
         // TODO: Allow workspace overrides on MCP permissions.
-        self.is_any_ai_enabled(app)
+        self.are_ai_settings_editable(app)
     }
 
     pub fn show_code_suggestion_speedbump(&self, app: &AppContext) -> bool {

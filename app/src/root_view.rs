@@ -76,7 +76,7 @@ use crate::{
     server::server_api::ServerApi,
     workspace::{view::OnboardingTutorial, PaneViewLocator, Workspace},
 };
-use crate::{features::FeatureFlag, ChannelState};
+use crate::{channel::Channel, features::FeatureFlag, ChannelState};
 use crate::{send_telemetry_from_app_ctx, GlobalResourceHandles, GlobalResourceHandlesProvider};
 use anyhow::Result;
 use cfg_if::cfg_if;
@@ -2005,15 +2005,23 @@ impl RootView {
             let agent_price_cents = Self::build_plan_yearly_price_cents(ctx);
 
             let auth_state = current_onboarding_auth_state(ctx);
+            let is_oss = ChannelState::channel() == Channel::Oss;
+            let initial_intention = if is_oss {
+                OnboardingIntention::Terminal
+            } else {
+                OnboardingIntention::AgentDrivenDevelopment
+            };
+            let free_user_no_ai_experiment = !is_oss && is_free_user_no_ai_experiment_active(ctx);
 
             AgentOnboardingView::new(
                 themes.clone(),
                 false, // Always use unskippable onboarding.
                 models,
                 default_model_id,
+                initial_intention,
                 workspace_enforces_autonomy,
                 FeatureFlag::AgentView.is_enabled(),
-                is_free_user_no_ai_experiment_active(ctx),
+                free_user_no_ai_experiment,
                 agent_price_cents,
                 auth_state,
                 ctx,
@@ -2070,7 +2078,8 @@ impl RootView {
                         });
                     }
                     UserWorkspacesEvent::TeamsChanged => {
-                        let new_locked = is_free_user_no_ai_experiment_active(ctx);
+                        let new_locked = ChannelState::channel() != Channel::Oss
+                            && is_free_user_no_ai_experiment_active(ctx);
                         let was_locked = onboarding_view_for_workspaces
                             .as_ref(ctx)
                             .free_user_no_ai_experiment(ctx);
