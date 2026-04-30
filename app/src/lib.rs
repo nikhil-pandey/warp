@@ -2827,6 +2827,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::Orchestration,
         #[cfg(feature = "orchestration_v2")]
         FeatureFlag::OrchestrationV2,
+        #[cfg(feature = "orchestration_pill_bar")]
+        FeatureFlag::OrchestrationPillBar,
         #[cfg(feature = "pending_user_query_indicator")]
         FeatureFlag::PendingUserQueryIndicator,
         #[cfg(feature = "queue_slash_command")]
@@ -2881,6 +2883,8 @@ pub fn enabled_features() -> HashSet<FeatureFlag> {
         FeatureFlag::CloudModeInputV2,
         #[cfg(feature = "configurable_context_window")]
         FeatureFlag::ConfigurableContextWindow,
+        #[cfg(feature = "handoff_cloud_cloud")]
+        FeatureFlag::HandoffCloudCloud,
     ]);
 
     // OSS / local-dev escape hatch: setting `WARP_ENABLE_ALL_FEATURE_FLAGS=1` turns on every

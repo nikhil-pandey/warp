@@ -10,7 +10,6 @@ use warpui::{Entity, EntityId, ModelContext, SingletonEntity};
 
 use crate::ai::active_agent_views_model::ActiveAgentViewsModel;
 use crate::ai::agent::conversation::AIConversationId;
-use crate::ai::agent_conversations_model::AgentConversationsModel;
 use crate::ai::ambient_agents::spawn::{spawn_task, AmbientAgentEvent};
 use crate::ai::ambient_agents::task::HarnessConfig;
 use crate::ai::ambient_agents::telemetry::CloudAgentTelemetryEvent;
@@ -427,6 +426,14 @@ impl AmbientAgentViewModel {
         );
     }
 
+    /// Attach the view model to the shared session created for a follow-up prompt and notify the
+    /// terminal manager to append that session's scrollback to the existing transcript.
+    pub fn attach_followup_session(&mut self, session_id: SessionId, ctx: &mut ModelContext<Self>) {
+        self.stop_progress_timer();
+        self.status = Status::AgentRunning;
+        ctx.emit(AmbientAgentViewModelEvent::FollowupSessionReady { session_id });
+    }
+
     pub fn status(&self) -> &Status {
         &self.status
     }
@@ -584,12 +591,6 @@ impl AmbientAgentViewModel {
                             );
                         }
 
-                        // Mark the task as manually opened so it appears in the conversation list
-                        // even though its server-side source may not be user-initiated.
-                        AgentConversationsModel::handle(ctx).update(ctx, |model, ctx| {
-                            model.mark_task_as_manually_opened(task_id, ctx);
-                        });
-
                         // Mark this task as active immediately so it renders under the Active section
                         // (and doesn't briefly appear under Past before the shared session join completes).
                         ActiveAgentViewsModel::handle(ctx).update(ctx, |model, ctx| {
@@ -653,8 +654,13 @@ impl AmbientAgentViewModel {
 
                         if let Some(session_id) = session_join_info.session_id {
                             me.stop_progress_timer();
+                            let event = if matches!(me.status, Status::AgentRunning) {
+                                AmbientAgentViewModelEvent::FollowupSessionReady { session_id }
+                            } else {
+                                AmbientAgentViewModelEvent::SessionReady { session_id }
+                            };
                             me.status = Status::AgentRunning;
-                            ctx.emit(AmbientAgentViewModelEvent::SessionReady { session_id });
+                            ctx.emit(event);
                         }
                     }
                     AmbientAgentEvent::AtCapacity => {
@@ -905,6 +911,10 @@ pub enum AmbientAgentViewModelEvent {
     ProgressUpdated,
     /// The ambient agent has started sharing its session.
     SessionReady {
+        session_id: SessionId,
+    },
+    /// A follow-up execution has started sharing a fresh session.
+    FollowupSessionReady {
         session_id: SessionId,
     },
     /// An environment was selected.

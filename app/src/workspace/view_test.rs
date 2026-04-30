@@ -686,6 +686,15 @@ fn new_session_menu_label(item: &MenuItem<WorkspaceAction>) -> String {
     }
 }
 
+fn reopen_closed_session_menu_item(
+    menu_items: &[MenuItem<WorkspaceAction>],
+) -> &MenuItemFields<WorkspaceAction> {
+    match menu_items.last() {
+        Some(MenuItem::Item(fields)) if fields.label() == "Reopen closed session" => fields,
+        _ => panic!("expected Reopen closed session to be the last new-session menu item"),
+    }
+}
+
 #[test]
 fn test_reward_modal_no_overlap() {
     App::test((), |mut app| async move {
@@ -2355,6 +2364,35 @@ fn test_vertical_tabs_panel_visibility_restores_from_window_snapshot() {
 }
 
 #[test]
+fn test_vertical_tabs_panel_restored_open_when_show_in_restored_windows_enabled() {
+    let _vertical_tabs_guard = FeatureFlag::VerticalTabs.override_enabled(true);
+
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+        app.update(|ctx| {
+            TabSettings::handle(ctx).update(ctx, |settings, ctx| {
+                report_if_error!(settings.use_vertical_tabs.set_value(true, ctx));
+                report_if_error!(settings
+                    .show_vertical_tab_panel_in_restored_windows
+                    .set_value(true, ctx));
+            });
+        });
+
+        let workspace = mock_workspace(&mut app);
+
+        let closed_snapshot = workspace.update(&mut app, |workspace, ctx| {
+            workspace.vertical_tabs_panel_open = false;
+            workspace.snapshot(ctx.window_id(), false, ctx)
+        });
+
+        let restored = restored_workspace(&mut app, closed_snapshot);
+        restored.read(&app, |workspace, _| {
+            assert!(workspace.vertical_tabs_panel_open);
+        });
+    });
+}
+
+#[test]
 fn test_vertical_tabs_panel_defaults_open_for_new_window_when_vertical_tabs_enabled() {
     let _vertical_tabs_guard = FeatureFlag::VerticalTabs.override_enabled(true);
 
@@ -2654,6 +2692,37 @@ fn test_unified_new_session_menu_uses_new_worktree_config_label_and_order() {
                 labels.get(separator_index + 2),
                 Some(&"New tab config".to_string())
             );
+        });
+    });
+}
+
+#[test]
+fn test_unified_new_session_menu_includes_reopen_closed_session() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let workspace = mock_workspace(&mut app);
+
+        workspace.update(&mut app, |workspace, ctx| {
+            let menu_items = workspace.unified_new_session_menu_items(ctx);
+            assert!(matches!(
+                menu_items.get(menu_items.len() - 2),
+                Some(MenuItem::Separator)
+            ));
+
+            let reopen_item = reopen_closed_session_menu_item(&menu_items);
+            assert!(reopen_item.is_disabled());
+            assert!(matches!(
+                reopen_item.on_select_action(),
+                Some(action) if matches!(action, WorkspaceAction::ReopenClosedSession)
+            ));
+
+            workspace.add_terminal_tab(false, ctx);
+            workspace.remove_tab(workspace.active_tab_index(), true, true, ctx);
+
+            let menu_items = workspace.unified_new_session_menu_items(ctx);
+            let reopen_item = reopen_closed_session_menu_item(&menu_items);
+            assert!(!reopen_item.is_disabled());
         });
     });
 }
