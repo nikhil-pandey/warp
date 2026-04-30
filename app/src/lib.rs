@@ -1090,10 +1090,16 @@ fn initialize_app(
         ctx.set_zoom_factor(WindowSettings::as_ref(ctx).zoom_level.as_zoom_factor());
     }
 
-    // Extract API key from command line options, if applicable.
+    // Extract API key from command line options, if applicable. Honored on the same
+    // channels as `WARP_SERVER_ROOT_URL` etc. (Dev/Local/Integration/Oss); Stable and
+    // Preview silently ignore it.
     let api_key = match launch_mode {
         LaunchMode::CommandLine { global_options, .. } => global_options.api_key.clone(),
-        LaunchMode::App { api_key, .. } if ChannelState::channel().is_dogfood() => api_key.clone(),
+        LaunchMode::App { api_key, .. }
+            if ChannelState::channel().allows_server_url_overrides() =>
+        {
+            api_key.clone()
+        }
         _ => None,
     };
     let api_key = if FeatureFlag::APIKeyAuthentication.is_enabled() {
